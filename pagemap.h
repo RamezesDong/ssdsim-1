@@ -2,14 +2,14 @@
   This project was supported by the National Basic Research 973 Program of China under Grant No.2011CB302301
   Huazhong University of Science and Technology (HUST)   Wuhan National Laboratory for Optoelectronics
 
-  FileName£º pagemap.h
+  FileNameï¿½ï¿½ pagemap.h
 Author: Hu Yang		Version: 2.1	Date:2011/12/02
-Description: 
+Description:
 
 History:
 <contributor>     <time>        <version>       <desc>                   <e-mail>
 Yang Hu	        2009/09/25	      1.0		    Creat SSDsim       yanghu@foxmail.com
-2010/05/01        2.x           Change 
+2010/05/01        2.x           Change
 Zhiming Zhu     2011/07/01        2.0           Change               812839842@qq.com
 Shuangwu Zhang  2011/11/01        2.1           Change               820876427@qq.com
 Chao Ren        2011/07/01        2.0           Change               529517386@qq.com
@@ -47,5 +47,3 @@ int gc_for_channel(struct ssd_info *ssd, unsigned int channel);
 int delete_gc_node(struct ssd_info *ssd, unsigned int channel,struct gc_operation *gc_node);
 
 #endif
-
-

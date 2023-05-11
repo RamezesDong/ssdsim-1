@@ -117,7 +117,7 @@ struct ssd_info *initiation(struct ssd_info *ssd)
     ssd->channel_head=(struct channel_info*)malloc(ssd->parameter->channel_number * sizeof(struct channel_info));
     alloc_assert(ssd->channel_head,"ssd->channel_head");
     memset(ssd->channel_head,0,ssd->parameter->channel_number * sizeof(struct channel_info));
-    initialize_channels(ssd );
+    initialize_channels(ssd);
 
 
     printf("\n");

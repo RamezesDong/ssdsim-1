@@ -463,7 +463,7 @@ struct ssd_info *distribute(struct ssd_info *ssd)
 #ifdef DEBUG
     printf("enter distribute,  current time:%lld\n",ssd->current_time);
 #endif
-    full_page=~(0xffffffff<<ssd->parameter->subpage_page);
+    full_page=~(0xffffffff<<ssd->parameter->subpage_page); // 0xffffffff left shift and negate to get 0x0000000f, meaning 4 bit available pages
 
     req = ssd->request_tail;
     if(req->response_time != 0){
@@ -483,8 +483,8 @@ struct ssd_info *distribute(struct ssd_info *ssd)
             {		
                 first_lsn = req->lsn;				
                 last_lsn = first_lsn + req->size;
-                complt = req->need_distr_flag;
-                start = first_lsn - first_lsn % ssd->parameter->subpage_page;
+                complt = req->need_distr_flag; // represent the status of each page involved in the request
+                start = first_lsn - first_lsn % ssd->parameter->subpage_page; // change lsn to lpn
                 end = (last_lsn/ssd->parameter->subpage_page + 1) * ssd->parameter->subpage_page;
                 i = (end - start)/32;	
 
@@ -881,7 +881,7 @@ unsigned int size(unsigned int stored)
 #ifdef DEBUG
     printf("leave size\n");
 #endif
-    return total;
+    return total; // total indicate the count of stored 1 bit.
 }
 
 
@@ -896,10 +896,10 @@ unsigned int transfer_size(struct ssd_info *ssd,int need_distribute,unsigned int
     unsigned int first_lpn,last_lpn,state,trans_size;
     unsigned int mask=0,offset1=0,offset2=0;
 
-    first_lpn=req->lsn/ssd->parameter->subpage_page;
+    first_lpn=req->lsn/ssd->parameter->subpage_page; // calculate lpn ...
     last_lpn=(req->lsn+req->size-1)/ssd->parameter->subpage_page;
 
-    mask=~(0xffffffff<<(ssd->parameter->subpage_page));
+    mask=~(0xffffffff<<(ssd->parameter->subpage_page)); // same as fullpage of distribute function
     state=mask;
     if(lpn==first_lpn)
     {
@@ -912,7 +912,7 @@ unsigned int transfer_size(struct ssd_info *ssd,int need_distribute,unsigned int
         state=state&(~(0xffffffff<<offset2));
     }
 
-    trans_size=size(state&need_distribute);
+    trans_size=size(state&need_distribute); // indicate sector size
 
     return trans_size;
 }

@@ -618,7 +618,7 @@ struct sub_request * creat_sub_request(struct ssd_info * ssd,unsigned int lpn,in
     if (operation == READ)
     {	
         loc = find_location(ssd,ssd->dram->map->map_entry[lpn].pn);
-        sub->location=loc;
+        sub->location=loc; // initialize sub
         sub->begin_time = ssd->current_time;
         sub->current_state = SR_WAIT;
         sub->current_time=MAX_INT64;
@@ -644,12 +644,12 @@ struct sub_request * creat_sub_request(struct ssd_info * ssd,unsigned int lpn,in
         }
         if (flag==0)
         {
-            if (p_ch->subs_r_tail!=NULL)
+            if (p_ch->subs_r_tail!=NULL) // create a node
             {
                 p_ch->subs_r_tail->next_node=sub;
                 p_ch->subs_r_tail=sub;
             } 
-            else
+            else // add to tail
             {
                 p_ch->subs_r_head=sub;
                 p_ch->subs_r_tail=sub;
