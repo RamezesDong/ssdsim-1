@@ -148,6 +148,10 @@ struct ac_time_characteristics{
     int tRHW;      //RE high to WE low
     int tWHR;      //WE high to RE low
     int tRST;      //device resetting time
+
+    // extra
+    int tSPROG; // SLC program time
+    int tSR;    // SLC read time
 }ac_timing;
 
 
@@ -211,6 +215,9 @@ struct ssd_info{
     struct sub_request *subs_w_tail;
     struct event_node *event;            //事件队列，每产生一个新的事件，按照时间顺序加到这个队列，在simulate函数最后，根据这个队列队首的时间，确定时间
     struct channel_info *channel_head;   //指向channel结构体数组的首地址
+
+    //extra
+    int slc_flag;
 };
 
 
@@ -245,6 +252,12 @@ struct chip_info{
     unsigned int ers_limit;             //该chip中每块能够被擦除的次数
     unsigned int token;                 //在动态分配中，为防止每次分配在第一个die需要维持一个令牌，每次从令牌所指的位置开始分配
 
+    // extra
+    int chip_type;                      // 1 indicate default, 0 indicate single type
+    unsigned int slc_block_num_plane;   // indicate how many slc blocks in a plane
+    unsigned int slc_page_num_block;        //indicate how many slc pages in a block
+    unsigned int slc_subpage_num_page;      //indicate how many slc subpage in a page
+
     int current_state;                  //channel has serveral states, including idle, command/address transfer,data transfer,unknown
     int next_state;
     int64_t current_time;               //记录该通道的当前时间
@@ -271,14 +284,28 @@ struct plane_info{
     int add_reg_ppn;                    //read，write时把地址传送到该变量，该变量代表地址寄存器。die由busy变为idle时，清除地址 //有可能因为一对多的映射，在一个读请求时，有多个相同的lpn，所以需要用ppn来区分  
     unsigned int free_page;             //该plane中有多少free page
     unsigned int ers_invalid;           //记录该plane中擦除失效的块数
-    unsigned int active_block;          //if a die has a active block, 该项表示其物理块号
+    unsigned int active_block;          //if a die has an active block, 该项表示其物理块号
     int can_erase_block;                //记录在一个plane中准备在gc操作中被擦除操作的块,-1表示还没有找到合适的块
     struct direct_erase *erase_node;    //用来记录可以直接删除的块号,在获取新的ppn时，每当出现invalid_page_num==64时，将其添加到这个指针上，供GC操作时直接删除
-    struct blk_info *blk_head;
+    struct blk_info *blk_head; // tlc head
+
+    // extra
+    // 我们规定优先使用 slc， 再使用 tlc
+    unsigned int slc_active_block;
+    unsigned int tlc_active_block;
+    int active_block_type;
+
+    int plane_type; // 0 is original, 1 is mixed slc and tlc
+    unsigned int tlc_blk_num;
+    unsigned int slc_blk_num;
+    unsigned int free_slc_page;
+    unsigned int free_tlc_page;
+    struct blk_info *slc_blk_head;
 };
 
 
 struct blk_info{
+    int blk_type;                      // blk 种类: 0 tlc, 1 slc
     unsigned int erase_count;          //块的擦除次数，该项记录在ram中，用于GC
     unsigned int free_page_num;        //记录该块中的free页个数，同上
     unsigned int invalid_page_num;     //记录该块中失效页的个数，同上
@@ -415,6 +442,12 @@ struct parameter_value{
     unsigned int page_block;
     unsigned int subpage_page;
 
+    // extra param
+    int slc_flag;
+    unsigned int slc_block_plane;
+    unsigned int slc_page_block;
+    unsigned int slc_subpage_page;
+
     unsigned int page_capacity;
     unsigned int subpage_capacity;
 
@@ -453,7 +486,7 @@ struct parameter_value{
     int allocation_scheme;          //记录分配方式的选择，0表示动态分配，1表示静态分配
     int static_allocation;          //记录是那种静态分配方式，如ICS09那篇文章所述的所有静态分配方式
     int dynamic_allocation;         //记录动态分配的方式
-    int advanced_commands;  
+    int advanced_commands;          // 默认20  two-plane program and read
     int ad_priority;                //record the priority between two plane operation and interleave operation
     int ad_priority2;               //record the priority of channel-level, 0 indicates that the priority order of channel-level is highest; 1 indicates the contrary
     int greed_CB_ad;                //0 don't use copyback advanced commands greedily; 1 use copyback advanced commands greedily
@@ -527,7 +560,7 @@ typedef struct Dram_write_map
 struct ssd_info *initiation(struct ssd_info *);
 struct parameter_value *load_parameters(char parameter_file[30]);
 struct page_info * initialize_page(struct page_info * p_page);
-struct blk_info * initialize_block(struct blk_info * p_block,struct parameter_value *parameter);
+struct blk_info * initialize_block(struct blk_info * p_block,struct parameter_value *parameter, int blk_type);
 struct plane_info * initialize_plane(struct plane_info * p_plane,struct parameter_value *parameter );
 struct die_info * initialize_die(struct die_info * p_die,struct parameter_value *parameter,long long current_time );
 struct chip_info * initialize_chip(struct chip_info * p_chip,struct parameter_value *parameter,long long current_time );

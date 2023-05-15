@@ -177,8 +177,13 @@ int get_requests(struct ssd_info *ssd)
      *large_lsn: channel下面有多少个subpage，即多少个sector。overprovide系数：SSD中并不是所有的空间都可以给用户使用，
      *比如32G的SSD可能有10%的空间保留下来留作他用，所以乘以1-provide
      ***********************************************************************************************************/
-    large_lsn=(int)((ssd->parameter->subpage_page*ssd->parameter->page_block*ssd->parameter->block_plane*ssd->parameter->plane_die*ssd->parameter->die_chip*ssd->parameter->chip_num)*(1-ssd->parameter->overprovide));
-    lsn = lsn%large_lsn;
+    large_lsn=(int)((1.0 * ssd->parameter->subpage_page *
+            ssd->parameter->page_block *
+            ssd->parameter->block_plane *
+            ssd->parameter->plane_die *
+            ssd->parameter->die_chip *
+            ssd->parameter->chip_num)*(1-ssd->parameter->overprovide));
+    lsn = lsn%large_lsn; // lsn % (8 * 64 * 768 * 2 * 2 * 2) 3145728
 
     nearest_event_time=find_nearest_event(ssd);
     if (nearest_event_time==MAX_INT64)
@@ -810,8 +815,16 @@ void statistic_output(struct ssd_info *ssd)
     fprintf(ssd->outputfile,"write request count: %13d\n",ssd->write_request_count);
     fprintf(ssd->outputfile,"read request average size: %13f\n",ssd->ave_read_size);
     fprintf(ssd->outputfile,"write request average size: %13f\n",ssd->ave_write_size);
-    fprintf(ssd->outputfile,"read request average response time: %lld\n",ssd->read_avg/ssd->read_request_count);
-    fprintf(ssd->outputfile,"write request average response time: %lld\n",ssd->write_avg/ssd->write_request_count);
+    if(ssd->read_request_count == 0) {
+      fprintf(ssd->outputfile,"read request average response time: %lld\n",0);
+    } else {
+      fprintf(ssd->outputfile,"read request average response time: %lld\n",ssd->read_avg/ssd->read_request_count);
+    }
+    if(ssd->read_request_count == 0) {
+      fprintf(ssd->outputfile,"write request average response time: %lld\n",0);
+    } else {
+      fprintf(ssd->outputfile,"write request average response time: %lld\n",ssd->write_avg/ssd->write_request_count);
+    }
     fprintf(ssd->outputfile,"buffer read hits: %13d\n",ssd->dram->buffer->read_hit);
     fprintf(ssd->outputfile,"buffer read miss: %13d\n",ssd->dram->buffer->read_miss_hit);
     fprintf(ssd->outputfile,"buffer write hits: %13d\n",ssd->dram->buffer->write_hit);
@@ -1032,14 +1045,14 @@ struct ssd_info *make_aged(struct ssd_info *ssd)
     if (ssd->parameter->aged==1)
     {
         //threshold表示一个plane中有多少页需要提前置为失效
-        threshould=(int)(ssd->parameter->block_plane*ssd->parameter->page_block*ssd->parameter->aged_ratio);  
+        threshould=(int)(get_plane_page_num(ssd) * ssd->parameter->aged_ratio);
         for (i=0;i<ssd->parameter->channel_number;i++)
             for (j=0;j<ssd->parameter->chip_channel[i];j++)
                 for (k=0;k<ssd->parameter->die_chip;k++)
                     for (l=0;l<ssd->parameter->plane_die;l++)
                     {  
                         flag=0;
-                        for (m=0;m<ssd->parameter->block_plane;m++)
+                        for (m=0;m < ssd->channel_head[i].chip_head[j].die_head[k].plane_head[l].tlc_blk_num;m++)
                         {  
                             if (flag>=threshould)
                             {
@@ -1132,5 +1145,4 @@ struct ssd_info *no_buffer_distribute(struct ssd_info *ssd)
 
     return ssd;
 }
-
 

@@ -46,4 +46,9 @@ int move_page(struct ssd_info * ssd, struct local *location,unsigned int * trans
 int gc_for_channel(struct ssd_info *ssd, unsigned int channel);
 int delete_gc_node(struct ssd_info *ssd, unsigned int channel,struct gc_operation *gc_node);
 
+// extra
+unsigned int get_plane_page_num(struct ssd_info *ssd);
+unsigned int find_slc_ppn(struct ssd_info * ssd,unsigned int channel,unsigned int chip,unsigned int die,unsigned int plane,unsigned int block,unsigned int page);
+unsigned int find_tlc_ppn(struct ssd_info * ssd,unsigned int channel,unsigned int chip,unsigned int die,unsigned int plane,unsigned int block,unsigned int page);
+
 #endif

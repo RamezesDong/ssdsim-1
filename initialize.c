@@ -212,19 +212,25 @@ struct page_info * initialize_page(struct page_info * p_page )
     return p_page;
 }
 
-struct blk_info * initialize_block(struct blk_info * p_block,struct parameter_value *parameter)
+struct blk_info * initialize_block(struct blk_info * p_block,struct parameter_value *parameter, int blk_type) // 0 indicates tlc, 1 indicates slc
 {
     unsigned int i;
     struct page_info * p_page;
 
-    p_block->free_page_num = parameter->page_block;	// all pages are free
+    if(blk_type == 0) {
+      p_block->blk_type = 0;
+      p_block->free_page_num = parameter->page_block;	// all pages are free
+    } else {
+      p_block->blk_type = 1;
+      p_block->free_page_num = parameter->slc_page_block;
+    }
     p_block->last_write_page = -1;	// no page has been programmed
 
-    p_block->page_head = (struct page_info *)malloc(parameter->page_block * sizeof(struct page_info));
+    p_block->page_head = (struct page_info *)malloc(p_block->free_page_num * sizeof(struct page_info));
     alloc_assert(p_block->page_head,"p_block->page_head");
-    memset(p_block->page_head,0,parameter->page_block * sizeof(struct page_info));
+    memset(p_block->page_head,0,p_block->free_page_num * sizeof(struct page_info));
 
-    for(i = 0; i<parameter->page_block; i++)
+    for(i = 0; i < p_block->free_page_num; i++)
     {
         p_page = &(p_block->page_head[i]);
         initialize_page(p_page );
@@ -238,17 +244,51 @@ struct plane_info * initialize_plane(struct plane_info * p_plane,struct paramete
     unsigned int i;
     struct blk_info * p_block;
     p_plane->add_reg_ppn = -1;  //plane 里面的额外寄存器additional register -1 表示无数据
-    p_plane->free_page=parameter->block_plane*parameter->page_block;
 
-    p_plane->blk_head = (struct blk_info *)malloc(parameter->block_plane * sizeof(struct blk_info));
-    alloc_assert(p_plane->blk_head,"p_plane->blk_head");
-    memset(p_plane->blk_head,0,parameter->block_plane * sizeof(struct blk_info));
+    if (parameter->slc_flag == 0) {
+      p_plane->plane_type = 0;
+      p_plane->tlc_blk_num = parameter->block_plane;
+      p_plane->free_page=parameter->block_plane * parameter->page_block;
 
-    for(i = 0; i<parameter->block_plane; i++)
-    {
+      p_plane->blk_head = (struct blk_info *)malloc(parameter->block_plane * sizeof(struct blk_info));
+      alloc_assert(p_plane->blk_head,"p_plane->blk_head");
+      memset(p_plane->blk_head,0,parameter->block_plane * sizeof(struct blk_info));
+
+      for(i = 0; i<parameter->block_plane; i++)
+      {
         p_block = &(p_plane->blk_head[i]);
-        initialize_block( p_block ,parameter);			
+        initialize_block( p_block ,parameter, 0);
+      }
+    } else {
+      p_plane->plane_type = 1;
+      p_plane->tlc_blk_num = parameter->block_plane - parameter->slc_block_plane; // block_plane - slc_block_plane
+      p_plane->slc_blk_num = parameter->slc_block_plane;
+      p_plane->free_page= p_plane->tlc_blk_num * parameter->page_block + p_plane->slc_blk_num * parameter->slc_page_block;
+      p_plane->free_slc_page = p_plane->slc_blk_num * parameter->slc_page_block;
+      p_plane->free_tlc_page = p_plane->tlc_blk_num * parameter->page_block;
+
+
+      p_plane->blk_head = (struct blk_info *)malloc(p_plane->tlc_blk_num * sizeof(struct blk_info));
+      alloc_assert(p_plane->blk_head,"p_plane->blk_head");
+      memset(p_plane->blk_head,0,parameter->block_plane * sizeof(struct blk_info));
+
+      for(i = 0; i < p_plane->tlc_blk_num; i++)
+      {
+        p_block = &(p_plane->blk_head[i]);
+        initialize_block( p_block ,parameter, 0);
+      }
+
+      //extra slc
+      p_plane->slc_blk_head = (struct blk_info *) malloc(parameter->slc_block_plane * sizeof(struct blk_info));
+      alloc_assert(p_plane->slc_blk_head, "p_plane->slc_blk_head");
+      memset(p_plane->slc_blk_head, 0, parameter->slc_block_plane * sizeof (struct blk_info));
+      for(i = 0; i<parameter->slc_block_plane; i++)
+      {
+        p_block = &(p_plane->slc_blk_head[i]);
+        initialize_block( p_block ,parameter, 1);
+      }
     }
+
     return p_plane;
 }
 
@@ -292,6 +332,12 @@ struct chip_info * initialize_chip(struct chip_info * p_chip,struct parameter_va
     p_chip->read_count = 0;
     p_chip->program_count = 0;
     p_chip->erase_count = 0;
+
+    //extra
+    p_chip->chip_type = parameter->slc_flag;
+    p_chip->slc_block_num_plane = parameter->slc_block_plane;
+    p_chip->slc_page_num_block = parameter->slc_page_block;
+    p_chip->slc_subpage_num_page = parameter->slc_subpage_page;
 
     p_chip->die_head = (struct die_info *)malloc(parameter->die_chip * sizeof(struct die_info));
     alloc_assert(p_chip->die_head,"p_chip->die_head");
@@ -405,7 +451,7 @@ struct parameter_value *load_parameters(char parameter_file[30])
         }else if((res_eql=strcmp(buf,"block number")) ==0){
             sscanf(buf + next_eql,"%d",&p->block_plane); 
         }else if((res_eql=strcmp(buf,"page number")) ==0){
-            sscanf(buf + next_eql,"%d",&p->page_block); 
+            sscanf(buf + next_eql,"%d",&p->page_block);
         }else if((res_eql=strcmp(buf,"subpage page")) ==0){
             sscanf(buf + next_eql,"%d",&p->subpage_page); 
         }else if((res_eql=strcmp(buf,"page capacity")) ==0){
@@ -558,6 +604,18 @@ struct parameter_value *load_parameters(char parameter_file[30])
         {
             sscanf(buf+12,"%d",&i);
             sscanf(buf + next_eql,"%d",&p->chip_channel[i]); 
+        }else if((res_eql=strcmp(buf,"slc flag")) ==0){
+          sscanf(buf + next_eql,"%d",&p->slc_flag);
+        }else if((res_eql=strcmp(buf,"slc block number")) ==0){
+          sscanf(buf + next_eql,"%d",&p->slc_block_plane);
+        }else if((res_eql=strcmp(buf,"slc page number")) ==0){
+          sscanf(buf + next_eql,"%d",&p->slc_page_block);
+        }else if((res_eql=strcmp(buf,"slc subpage page")) ==0){
+          sscanf(buf + next_eql,"%d",&p->slc_subpage_page);
+        }else if((res_eql=strcmp(buf,"t_SPROG")) ==0){
+          sscanf(buf + next_eql,"%d",&p->time_characteristics.tSPROG);
+        }else if((res_eql=strcmp(buf,"t_SR")) ==0){
+          sscanf(buf + next_eql,"%d",&p->time_characteristics.tSR);
         }else{
             printf("don't match\t %s\n",buf);
         }

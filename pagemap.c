@@ -19,6 +19,7 @@ Hao Luo         2011/01/01        2.0           Change               luohao13568
 #define _CRTDBG_MAP_ALLOC
 
 #include "pagemap.h"
+#include "flash.h"
 
 
 /************************************************
@@ -146,6 +147,81 @@ unsigned int find_ppn(struct ssd_info * ssd,unsigned int channel,unsigned int ch
     return ppn;
 }
 
+unsigned int find_slc_ppn(struct ssd_info * ssd,unsigned int channel,unsigned int chip,unsigned int die,unsigned int plane,unsigned int block,unsigned int page)
+{
+  unsigned int ppn=0;
+  unsigned int i=0;
+  int page_plane=0,page_die=0,page_chip=0;
+  int page_channel[100];                  /*这个数组存放的是每个channel的page数目*/
+
+#ifdef DEBUG
+  printf("enter find_psn,channel:%d, chip:%d, die:%d, plane:%d, block:%d, page:%d\n",channel,chip,die,plane,block,page);
+#endif
+
+  /*********************************************
+   *计算出plane，die，chip，channel中的page的数目
+   **********************************************/
+  page_plane=ssd->parameter->slc_page_block * ssd->parameter->slc_block_plane;
+  page_die=page_plane*ssd->parameter->plane_die;
+  page_chip=page_die*ssd->parameter->die_chip;
+  while(i < ssd->parameter->channel_number)
+  {
+    page_channel[i]= ssd->parameter->chip_channel[i] * page_chip;
+    i++;
+  }
+
+  /****************************************************************************
+   *计算物理页号ppn，ppn是channel，chip，die，plane，block，page中page个数的总和
+   *****************************************************************************/
+  i=0;
+  while(i < channel)
+  {
+    ppn=ppn+page_channel[i];
+    i++;
+  }
+  ppn=ppn + page_chip*chip+page_die * die+page_plane * plane+block * ssd->parameter->page_block+page;
+
+  return ppn;
+}
+
+unsigned int find_tlc_ppn(struct ssd_info * ssd,unsigned int channel,unsigned int chip,unsigned int die,unsigned int plane,unsigned int block,unsigned int page)
+{
+  unsigned int ppn=0;
+  unsigned int i=0;
+  int page_plane=0,page_die=0,page_chip=0;
+  int page_channel[100];                  /*这个数组存放的是每个channel的page数目*/
+
+#ifdef DEBUG
+  printf("enter find_psn,channel:%d, chip:%d, die:%d, plane:%d, block:%d, page:%d\n",channel,chip,die,plane,block,page);
+#endif
+
+  /*********************************************
+   *计算出plane，die，chip，channel中的page的数目
+   **********************************************/
+  page_plane=ssd->parameter->page_block*ssd->parameter->block_plane;
+  page_die=page_plane*ssd->parameter->plane_die;
+  page_chip=page_die*ssd->parameter->die_chip;
+  while(i<ssd->parameter->channel_number)
+  {
+    page_channel[i]=ssd->parameter->chip_channel[i]*page_chip;
+    i++;
+  }
+
+  /****************************************************************************
+   *计算物理页号ppn，ppn是channel，chip，die，plane，block，page中page个数的总和
+   *****************************************************************************/
+  i=0;
+  while(i<channel)
+  {
+    ppn=ppn+page_channel[i];
+    i++;
+  }
+  ppn=ppn+page_chip*chip+page_die*die+page_plane*plane+block*ssd->parameter->page_block+page;
+
+  return ppn;
+}
+
+
 /********************************
  *函数功能是获得一个读子请求的状态
  *********************************/
@@ -168,7 +244,7 @@ struct ssd_info *pre_process_page(struct ssd_info *ssd)
 {
     int fl=0;
     unsigned int device,lsn,size,ope,lpn,full_page;
-    unsigned int largest_lsn,sub_size,ppn,add_size=0;
+    unsigned int largest_lsn,sub_size,plane_page_num, ppn,add_size=0;
     unsigned int i=0,j,k;
     int map_entry_new,map_entry_old,modify;
     int flag=0;
@@ -188,7 +264,9 @@ struct ssd_info *pre_process_page(struct ssd_info *ssd)
 
     full_page=~(0xffffffff<<(ssd->parameter->subpage_page));
     /*计算出这个ssd的最大逻辑扇区号*/
-    largest_lsn=(unsigned int )((ssd->parameter->chip_num*ssd->parameter->die_chip*ssd->parameter->plane_die*ssd->parameter->block_plane*ssd->parameter->page_block*ssd->parameter->subpage_page)*(1-ssd->parameter->overprovide));
+    plane_page_num = get_plane_page_num(ssd);
+    largest_lsn=(unsigned int )((ssd->parameter->chip_num * ssd->parameter->die_chip * ssd->parameter->plane_die *
+            plane_page_num * ssd->parameter->subpage_page)*(1-ssd->parameter->overprovide));
 
     while(fgets(buffer_request,200,ssd->tracefile))
     {
@@ -203,14 +281,14 @@ struct ssd_info *pre_process_page(struct ssd_info *ssd)
             while(add_size<size)
             {				
                 lsn=lsn%largest_lsn;                                    /*防止获得的lsn比最大的lsn还大*/		
-                sub_size=ssd->parameter->subpage_page-(lsn%ssd->parameter->subpage_page);		
-                if(add_size+sub_size>=size)                             /*只有当一个请求的大小小于一个page的大小时或者是处理一个请求的最后一个page时会出现这种情况*/
+                sub_size=ssd->parameter->subpage_page - (lsn%ssd->parameter->subpage_page);
+                if(add_size + sub_size>=size)                             /*只有当一个请求的大小小于一个page的大小时或者是处理一个请求的最后一个page时会出现这种情况*/
                 {		
                     sub_size=size-add_size;		
                     add_size+=sub_size;		
                 }
 
-                if((sub_size>ssd->parameter->subpage_page)||(add_size>size))/*当预处理一个子大小时，这个大小大于一个page或是已经处理的大小大于size就报错*/		
+                if((sub_size > ssd->parameter->subpage_page)||(add_size > size))/*当预处理一个子大小时，这个大小大于一个page或是已经处理的大小大于size就报错*/
                 {		
                     printf("pre_process sub_size:%d\n",sub_size);		
                 }
@@ -221,7 +299,7 @@ struct ssd_info *pre_process_page(struct ssd_info *ssd)
                  *A，这个状态==0，表示以前没有写过，现在需要直接将ub_size大小的子页写进去写进去
                  *B，这个状态>0，表示，以前有写过，这需要进一步比较状态，因为新写的状态可以与以前的状态有重叠的扇区的地方
                  ********************************************************************************************************/
-                lpn=lsn/ssd->parameter->subpage_page;
+                lpn= lsn / ssd->parameter->subpage_page; // 逻辑页得到物理页
                 if(ssd->dram->map->map_entry[lpn].state==0)                 /*状态为0的情况*/
                 {
                     /**************************************************************
@@ -349,11 +427,11 @@ unsigned int get_ppn_for_pre_process(struct ssd_info *ssd,unsigned int lsn)
 
                     break;
                 }
-            case 2:
+            case 2: // 默认选择第二张方法
                 {
                     channel=lpn%channel_num;
-                    chip=(lpn/(plane_num*channel_num))%chip_num;
-                    die=(lpn/(plane_num*chip_num*channel_num))%die_num;
+                    chip=(lpn/(plane_num*channel_num))%chip_num; // plane num 默认 2,  chip num 为 2
+                    die=(lpn/(plane_num*chip_num*channel_num))%die_num; // die num 默认为 2
                     plane=(lpn/channel_num)%plane_num;
                     break;
                 }
@@ -445,7 +523,7 @@ struct ssd_info *get_ppn(struct ssd_info *ssd,unsigned int channel,unsigned int 
     ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].last_write_page++;	
     ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].free_page_num--;
 
-    if(ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].last_write_page>63)
+    if(ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].last_write_page>ssd->parameter->page_block)
     {
         printf("error! the last write page larger than 64!!\n");
         while(1){}
@@ -573,13 +651,13 @@ unsigned int get_ppn_for_gc(struct ssd_info *ssd,unsigned int channel,unsigned i
     ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].last_write_page++;	
     ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].free_page_num--;
 
-    if(ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].last_write_page>63)
+    if(ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].last_write_page>ssd->parameter->page_block)
     {
         printf("error! the last write page larger than 64!!\n");
         while(1){}
     }
 
-    block=active_block;	
+    block=active_block;
     page=ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].last_write_page;	
 
     ppn=find_ppn(ssd,channel,chip,die,plane,block,page);
@@ -912,7 +990,7 @@ Status move_page(struct ssd_info * ssd, struct local *location, unsigned int * t
 
     new_location=find_location(ssd,ppn);                                                                   /*根据新获得的ppn获取new_location*/
 
-    if ((ssd->parameter->advanced_commands&AD_COPYBACK)==AD_COPYBACK)
+    if ((ssd->parameter->advanced_commands&AD_COPYBACK)==AD_COPYBACK) // 默认关闭
     {
         if (ssd->parameter->greed_CB_ad==1)                                                                /*贪婪地使用高级命令*/
         {
@@ -1432,3 +1510,14 @@ int decide_gc_invoke(struct ssd_info *ssd, unsigned int channel)
     }
 }
 
+unsigned int get_plane_page_num(struct ssd_info *ssd) {
+  unsigned int tlc_blk_num,slc_blk_num;
+  if(ssd->slc_flag == 1) {
+    tlc_blk_num = ssd->parameter->block_plane - ssd->parameter->slc_block_plane; // block_plane - slc_block_plane
+    slc_blk_num = ssd->parameter->slc_block_plane;
+    return  tlc_blk_num * ssd->parameter->page_block + slc_blk_num * ssd->parameter->slc_page_block;
+  } else {
+    tlc_blk_num = ssd->parameter->block_plane;
+    return tlc_blk_num * ssd->parameter->page_block;
+  }
+}

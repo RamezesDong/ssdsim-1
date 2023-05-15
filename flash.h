@@ -52,6 +52,11 @@ int  find_active_block(struct ssd_info *ssd,unsigned int channel,unsigned int ch
 int write_page(struct ssd_info *ssd,unsigned int channel,unsigned int chip,unsigned int die,unsigned int plane,unsigned int active_block,unsigned int *ppn);
 int allocate_location(struct ssd_info * ssd ,struct sub_request *sub_req);
 
+//extra
+int write_slc_page(struct ssd_info *ssd,unsigned int channel,unsigned int chip,unsigned int die,unsigned int plane,unsigned int active_block,unsigned int *ppn);
+int write_tlc_page(struct ssd_info *ssd,unsigned int channel,unsigned int chip,unsigned int die,unsigned int plane,unsigned int active_block,unsigned int *ppn);
+
+
 
 int go_one_step(struct ssd_info * ssd, struct sub_request * sub1,struct sub_request *sub2, unsigned int aim_state,unsigned int command);
 int services_2_r_cmd_trans_and_complete(struct ssd_info * ssd);
