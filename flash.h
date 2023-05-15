@@ -49,7 +49,7 @@ struct ssd_info *delete_from_channel(struct ssd_info *ssd,unsigned int channel,s
 struct ssd_info *un_greed_interleave_copyback(struct ssd_info *,unsigned int,unsigned int,unsigned int,struct sub_request *,struct sub_request *);
 struct ssd_info *un_greed_copyback(struct ssd_info *,unsigned int,unsigned int,unsigned int,struct sub_request *);
 int  find_active_block(struct ssd_info *ssd,unsigned int channel,unsigned int chip,unsigned int die,unsigned int plane);
-int write_page(struct ssd_info *ssd,unsigned int channel,unsigned int chip,unsigned int die,unsigned int plane,unsigned int active_block,unsigned int *ppn);
+int write_page(struct ssd_info *ssd,unsigned int channel,unsigned int chip,unsigned int die,unsigned int plane,unsigned int active_block,int active_block_type, unsigned int *ppn);
 int allocate_location(struct ssd_info * ssd ,struct sub_request *sub_req);
 
 //extra

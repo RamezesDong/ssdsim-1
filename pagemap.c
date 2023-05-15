@@ -179,9 +179,10 @@ unsigned int find_slc_ppn(struct ssd_info * ssd,unsigned int channel,unsigned in
     ppn=ppn+page_channel[i];
     i++;
   }
-  ppn=ppn + page_chip*chip+page_die * die+page_plane * plane+block * ssd->parameter->page_block+page;
+  ppn=ppn + page_chip * chip+page_die * die+page_plane * plane + block * ssd->parameter->slc_page_block + page;
 
-  return ppn;
+  unsigned int flag = 1;
+  return ppn ^ (flag << 31);
 }
 
 unsigned int find_tlc_ppn(struct ssd_info * ssd,unsigned int channel,unsigned int chip,unsigned int die,unsigned int plane,unsigned int block,unsigned int page)
@@ -198,7 +199,7 @@ unsigned int find_tlc_ppn(struct ssd_info * ssd,unsigned int channel,unsigned in
   /*********************************************
    *计算出plane，die，chip，channel中的page的数目
    **********************************************/
-  page_plane=ssd->parameter->page_block*ssd->parameter->block_plane;
+  page_plane=ssd->parameter->page_block * (ssd->parameter->block_plane - ssd->parameter->slc_block_plane);
   page_die=page_plane*ssd->parameter->plane_die;
   page_chip=page_die*ssd->parameter->die_chip;
   while(i<ssd->parameter->channel_number)
@@ -218,7 +219,8 @@ unsigned int find_tlc_ppn(struct ssd_info * ssd,unsigned int channel,unsigned in
   }
   ppn=ppn+page_chip*chip+page_die*die+page_plane*plane+block*ssd->parameter->page_block+page;
 
-  return ppn;
+  unsigned int flag = 0;
+  return ppn ^ (flag << 31);
 }
 
 
@@ -370,6 +372,7 @@ unsigned int get_ppn_for_pre_process(struct ssd_info *ssd,unsigned int lsn)
     unsigned int ppn,lpn;
     unsigned int active_block;
     unsigned int channel_num=0,chip_num=0,die_num=0,plane_num=0;
+    int active_block_type;
 
 #ifdef DEBUG
     printf("enter get_psn_for_pre_process\n");
@@ -475,7 +478,8 @@ unsigned int get_ppn_for_pre_process(struct ssd_info *ssd,unsigned int lsn)
         return 0;
     }
     active_block=ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].active_block;
-    if(write_page(ssd,channel,chip,die,plane,active_block,&ppn)==ERROR)
+    active_block_type = ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].active_block_type;
+    if(write_page(ssd,channel,chip,die,plane,active_block,active_block_type,&ppn)==ERROR)
     {
         return 0;
     }

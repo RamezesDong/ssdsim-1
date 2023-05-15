@@ -574,7 +574,7 @@ Status  find_active_block(struct ssd_info *ssd,unsigned int channel,unsigned int
           count++;
         }
         ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].active_block=tlc_active_block;
-        ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].active_block_type = 0; // slc
+        ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].active_block_type = 0; // tlc
       } else { // select from slc
         ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].active_block=slc_blk_num;
         ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].active_block_type = 1; // slc
@@ -595,24 +595,29 @@ Status  find_active_block(struct ssd_info *ssd,unsigned int channel,unsigned int
  *这个函数的功能就是一个模拟一个实实在在的写操作
  *就是更改这个page的相关参数，以及整个ssd的统计参数
  **************************************************/
-Status write_page(struct ssd_info *ssd,unsigned int channel,unsigned int chip,unsigned int die,unsigned int plane,unsigned int active_block,unsigned int *ppn)
+Status write_page(struct ssd_info *ssd,unsigned int channel,unsigned int chip,unsigned int die,unsigned int plane,unsigned int active_block,int active_block_type, unsigned int *ppn)
 {
-    int last_write_page=0;
-    last_write_page=++(ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].last_write_page);	
-    if(last_write_page>=(int)(ssd->parameter->page_block))
-    {
-        ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].last_write_page=0;
-        printf("error! the last write page larger than 64!!\n");
-        return ERROR;
+    if (active_block_type == 0) {
+        return write_tlc_page(ssd, channel, chip, die, plane, active_block, ppn);
+    } else {
+        return write_slc_page(ssd, channel, chip, die, plane, active_block, ppn);
     }
-
-    ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].free_page_num--; 
-    ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].free_page--;
-    ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].page_head[last_write_page].written_count++;
-    ssd->write_flash_count++;    
-    *ppn=find_ppn(ssd,channel,chip,die,plane,active_block,last_write_page);
-
-    return SUCCESS;
+//    int last_write_page=0;
+//    last_write_page=++(ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].last_write_page);
+//    if(last_write_page>=(int)(ssd->parameter->page_block))
+//    {
+//        ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].last_write_page=0;
+//        printf("error! the last write page larger than 64!!\n");
+//        return ERROR;
+//    }
+//
+//    ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].free_page_num--;
+//    ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].free_page--;
+//    ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].page_head[last_write_page].written_count++;
+//    ssd->write_flash_count++;
+//    *ppn=find_ppn(ssd,channel,chip,die,plane,active_block,last_write_page);
+//
+//    return SUCCESS;
 }
 
 Status write_slc_page(struct ssd_info *ssd,unsigned int channel,unsigned int chip,unsigned int die,unsigned int plane,unsigned int active_block,unsigned int *ppn)
