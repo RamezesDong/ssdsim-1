@@ -86,7 +86,7 @@ struct local *find_location(struct ssd_info *ssd,unsigned int ppn)
     alloc_assert(location,"location");
     memset(location,0, sizeof(struct local));
 
-    page_plane=ssd->parameter->page_block*ssd->parameter->block_plane;
+    page_plane=ssd->parameter->page_block * ssd->parameter->block_plane;
     page_die=page_plane*ssd->parameter->plane_die;
     page_chip=page_die*ssd->parameter->die_chip;
     page_channel=page_chip*ssd->parameter->chip_channel[0];
@@ -110,7 +110,7 @@ struct local *find_location(struct ssd_info *ssd,unsigned int ppn)
  *这个函数的功能是根据参数channel，chip，die，plane，block，page，找到该物理页号
  *函数的返回值就是这个物理页号
  ******************************************************************************/
-unsigned int find_ppn(struct ssd_info * ssd,unsigned int channel,unsigned int chip,unsigned int die,unsigned int plane,unsigned int block,unsigned int page)
+unsigned int find_ppn(struct ssd_info * ssd,unsigned int channel,unsigned int chip,unsigned int die,unsigned int plane,unsigned int block, unsigned int page)
 {
     unsigned int ppn=0;
     unsigned int i=0;
@@ -124,7 +124,7 @@ unsigned int find_ppn(struct ssd_info * ssd,unsigned int channel,unsigned int ch
     /*********************************************
      *计算出plane，die，chip，channel中的page的数目
      **********************************************/
-    page_plane=ssd->parameter->page_block*ssd->parameter->block_plane;
+    page_plane=ssd->parameter->page_block*ssd->parameter->block_plane; // 会估计变大
     page_die=page_plane*ssd->parameter->plane_die;
     page_chip=page_die*ssd->parameter->die_chip;
     while(i<ssd->parameter->channel_number)
@@ -145,82 +145,6 @@ unsigned int find_ppn(struct ssd_info * ssd,unsigned int channel,unsigned int ch
     ppn=ppn+page_chip*chip+page_die*die+page_plane*plane+block*ssd->parameter->page_block+page;
 
     return ppn;
-}
-
-unsigned int find_slc_ppn(struct ssd_info * ssd,unsigned int channel,unsigned int chip,unsigned int die,unsigned int plane,unsigned int block,unsigned int page)
-{
-  unsigned int ppn=0;
-  unsigned int i=0;
-  int page_plane=0,page_die=0,page_chip=0;
-  int page_channel[100];                  /*这个数组存放的是每个channel的page数目*/
-
-#ifdef DEBUG
-  printf("enter find_psn,channel:%d, chip:%d, die:%d, plane:%d, block:%d, page:%d\n",channel,chip,die,plane,block,page);
-#endif
-
-  /*********************************************
-   *计算出plane，die，chip，channel中的page的数目
-   **********************************************/
-  page_plane=ssd->parameter->slc_page_block * ssd->parameter->slc_block_plane;
-  page_die=page_plane*ssd->parameter->plane_die;
-  page_chip=page_die*ssd->parameter->die_chip;
-  while(i < ssd->parameter->channel_number)
-  {
-    page_channel[i]= ssd->parameter->chip_channel[i] * page_chip;
-    i++;
-  }
-
-  /****************************************************************************
-   *计算物理页号ppn，ppn是channel，chip，die，plane，block，page中page个数的总和
-   *****************************************************************************/
-  i=0;
-  while(i < channel)
-  {
-    ppn=ppn+page_channel[i];
-    i++;
-  }
-  ppn=ppn + page_chip * chip+page_die * die+page_plane * plane + block * ssd->parameter->slc_page_block + page;
-
-  unsigned int flag = 1;
-  return ppn ^ (flag << 31);
-}
-
-unsigned int find_tlc_ppn(struct ssd_info * ssd,unsigned int channel,unsigned int chip,unsigned int die,unsigned int plane,unsigned int block,unsigned int page)
-{
-  unsigned int ppn=0;
-  unsigned int i=0;
-  int page_plane=0,page_die=0,page_chip=0;
-  int page_channel[100];                  /*这个数组存放的是每个channel的page数目*/
-
-#ifdef DEBUG
-  printf("enter find_psn,channel:%d, chip:%d, die:%d, plane:%d, block:%d, page:%d\n",channel,chip,die,plane,block,page);
-#endif
-
-  /*********************************************
-   *计算出plane，die，chip，channel中的page的数目
-   **********************************************/
-  page_plane=ssd->parameter->page_block * (ssd->parameter->block_plane - ssd->parameter->slc_block_plane);
-  page_die=page_plane*ssd->parameter->plane_die;
-  page_chip=page_die*ssd->parameter->die_chip;
-  while(i<ssd->parameter->channel_number)
-  {
-    page_channel[i]=ssd->parameter->chip_channel[i]*page_chip;
-    i++;
-  }
-
-  /****************************************************************************
-   *计算物理页号ppn，ppn是channel，chip，die，plane，block，page中page个数的总和
-   *****************************************************************************/
-  i=0;
-  while(i<channel)
-  {
-    ppn=ppn+page_channel[i];
-    i++;
-  }
-  ppn=ppn+page_chip*chip+page_die*die+page_plane*plane+block*ssd->parameter->page_block+page;
-
-  unsigned int flag = 0;
-  return ppn ^ (flag << 31);
 }
 
 
@@ -315,9 +239,23 @@ struct ssd_info *pre_process_page(struct ssd_info *ssd)
                     ssd->channel_head[location->channel].chip_head[location->chip].program_count++;		
                     ssd->dram->map->map_entry[lpn].pn=ppn;	
                     ssd->dram->map->map_entry[lpn].state=set_entry_state(ssd,lsn,sub_size);   //0001
-                    ssd->channel_head[location->channel].chip_head[location->chip].die_head[location->die].plane_head[location->plane].blk_head[location->block].page_head[location->page].lpn=lpn;
-                    ssd->channel_head[location->channel].chip_head[location->chip].die_head[location->die].plane_head[location->plane].blk_head[location->block].page_head[location->page].valid_state=ssd->dram->map->map_entry[lpn].state;
-                    ssd->channel_head[location->channel].chip_head[location->chip].die_head[location->die].plane_head[location->plane].blk_head[location->block].page_head[location->page].free_state=((~ssd->dram->map->map_entry[lpn].state)&full_page);
+                    if (ssd->slc_flag == 0) {
+                      ssd->channel_head[location->channel].chip_head[location->chip].die_head[location->die].plane_head[location->plane].blk_head[location->block].page_head[location->page].lpn=lpn;
+                      ssd->channel_head[location->channel].chip_head[location->chip].die_head[location->die].plane_head[location->plane].blk_head[location->block].page_head[location->page].valid_state=ssd->dram->map->map_entry[lpn].state;
+                      ssd->channel_head[location->channel].chip_head[location->chip].die_head[location->die].plane_head[location->plane].blk_head[location->block].page_head[location->page].free_state=((~ssd->dram->map->map_entry[lpn].state)&full_page);
+                    } else {
+                      if(location->block < ssd->parameter->slc_block_plane) {
+                        int slc_blk = location->block;
+                        ssd->channel_head[location->channel].chip_head[location->chip].die_head[location->die].plane_head[location->plane].slc_blk_head[slc_blk].page_head[location->page].lpn=lpn;
+                        ssd->channel_head[location->channel].chip_head[location->chip].die_head[location->die].plane_head[location->plane].slc_blk_head[slc_blk].page_head[location->page].valid_state=ssd->dram->map->map_entry[lpn].state;
+                        ssd->channel_head[location->channel].chip_head[location->chip].die_head[location->die].plane_head[location->plane].slc_blk_head[slc_blk].page_head[location->page].free_state=((~ssd->dram->map->map_entry[lpn].state)&full_page);
+                      } else {
+                        int tlc_blk = location->block - ssd->parameter->slc_block_plane;
+                        ssd->channel_head[location->channel].chip_head[location->chip].die_head[location->die].plane_head[location->plane].blk_head[tlc_blk].page_head[location->page].lpn=lpn;
+                        ssd->channel_head[location->channel].chip_head[location->chip].die_head[location->die].plane_head[location->plane].blk_head[tlc_blk].page_head[location->page].valid_state=ssd->dram->map->map_entry[lpn].state;
+                        ssd->channel_head[location->channel].chip_head[location->chip].die_head[location->die].plane_head[location->plane].blk_head[tlc_blk].page_head[location->page].free_state=((~ssd->dram->map->map_entry[lpn].state)&full_page);
+                      }
+                    }
 
                     free(location);
                     location=NULL;
@@ -333,9 +271,21 @@ struct ssd_info *pre_process_page(struct ssd_info *ssd)
                     ssd->program_count++;	
                     ssd->channel_head[location->channel].program_count++;
                     ssd->channel_head[location->channel].chip_head[location->chip].program_count++;		
-                    ssd->dram->map->map_entry[lsn/ssd->parameter->subpage_page].state=modify; 
+                    ssd->dram->map->map_entry[lsn/ssd->parameter->subpage_page].state=modify;
+                  if (ssd->slc_flag == 0) {
                     ssd->channel_head[location->channel].chip_head[location->chip].die_head[location->die].plane_head[location->plane].blk_head[location->block].page_head[location->page].valid_state=modify;
                     ssd->channel_head[location->channel].chip_head[location->chip].die_head[location->die].plane_head[location->plane].blk_head[location->block].page_head[location->page].free_state=((~modify)&full_page);
+                  } else {
+                    if(location->block < ssd->parameter->slc_block_plane) {
+                      int slc_blk = location->block;
+                      ssd->channel_head[location->channel].chip_head[location->chip].die_head[location->die].plane_head[location->plane].slc_blk_head[slc_blk].page_head[location->page].valid_state=modify;
+                      ssd->channel_head[location->channel].chip_head[location->chip].die_head[location->die].plane_head[location->plane].slc_blk_head[slc_blk].page_head[location->page].free_state=((~modify)&full_page);
+                    } else {
+                      int tlc_blk = location->block - ssd->parameter->slc_block_plane;
+                      ssd->channel_head[location->channel].chip_head[location->chip].die_head[location->die].plane_head[location->plane].blk_head[tlc_blk].page_head[location->page].valid_state=modify;
+                      ssd->channel_head[location->channel].chip_head[location->chip].die_head[location->die].plane_head[location->plane].blk_head[tlc_blk].page_head[location->page].free_state=((~modify)&full_page);
+                    }
+                  }
 
                     free(location);
                     location=NULL;
@@ -478,8 +428,7 @@ unsigned int get_ppn_for_pre_process(struct ssd_info *ssd,unsigned int lsn)
         return 0;
     }
     active_block=ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].active_block;
-    active_block_type = ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].active_block_type;
-    if(write_page(ssd,channel,chip,die,plane,active_block,active_block_type,&ppn)==ERROR)
+    if(write_page(ssd,channel,chip,die,plane,active_block,&ppn)==ERROR)
     {
         return 0;
     }

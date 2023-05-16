@@ -48,7 +48,5 @@ int delete_gc_node(struct ssd_info *ssd, unsigned int channel,struct gc_operatio
 
 // extra
 unsigned int get_plane_page_num(struct ssd_info *ssd);
-unsigned int find_slc_ppn(struct ssd_info * ssd,unsigned int channel,unsigned int chip,unsigned int die,unsigned int plane,unsigned int block,unsigned int page);
-unsigned int find_tlc_ppn(struct ssd_info * ssd,unsigned int channel,unsigned int chip,unsigned int die,unsigned int plane,unsigned int block,unsigned int page);
 
 #endif

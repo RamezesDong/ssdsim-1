@@ -89,8 +89,9 @@ aged ratio=0.94;                #If we need to make SSD aged, set the aged ratio
 
 #extra parameters
 slc flag = 1; # 0 for no slc, 1 for slc
-slc block number = 128;
+slc block number = 32;
 slc page number = 128;
 slc subpage page = 8;
+tlc block number = 384;
 t_SPROG = 100000;
 t_SR = 25000;
