@@ -218,6 +218,14 @@ struct ssd_info{
 
     //extra
     int slc_flag;
+    struct size_count* ssd_size_count;
+};
+
+struct size_count{
+    int count;
+    int max_count;
+    int size_sum;
+
 };
 
 

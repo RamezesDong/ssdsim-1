@@ -1649,7 +1649,7 @@ struct ssd_info *process(struct ssd_info *ssd)
     time = ssd->current_time;
     services_2_r_cmd_trans_and_complete(ssd);                                            /*处理当前状态是SR_R_C_A_TRANSFER或者当前状态是SR_COMPLETE，或者下一状态是SR_COMPLETE并且下一状态预计时间小于当前状态时间*/
 
-    random_num=ssd->program_count%ssd->parameter->channel_number;                        /*产生一个随机数，保证每次从不同的channel开始查询*/
+    random_num=ssd->program_count % ssd->parameter->channel_number;                        /*产生一个随机数，保证每次从不同的channel开始查询*/
 
     /*****************************************
      *循环处理所有channel上的读写子请求
@@ -1741,7 +1741,7 @@ struct ssd_info *dynamic_advanced_process(struct ssd_info *ssd,unsigned int chan
         }
     }
 
-    if ((ssd->parameter->allocation_scheme==0))                                           /*全动态分配，需要从ssd->subs_w_head上选取等待服务的子请求*/
+    if (ssd->parameter->allocation_scheme==0)                                           /*全动态分配，需要从ssd->subs_w_head上选取等待服务的子请求*/
     {
         if(ssd->parameter->dynamic_allocation==0)
         {
@@ -3079,7 +3079,7 @@ struct ssd_info *compute_serve_time(struct ssd_info *ssd,unsigned int channel,un
 
         ssd->channel_head[channel].chip_head[chip].current_state=CHIP_WRITE_BUSY;										
         ssd->channel_head[channel].chip_head[chip].current_time=ssd->current_time;									
-        ssd->channel_head[channel].chip_head[chip].next_state=CHIP_IDLE;										
+        ssd->channel_head[channel].chip_head[chip].next_state=CHIP_IDLE;
         ssd->channel_head[channel].chip_head[chip].next_state_predict_time=ssd->channel_head[channel].next_state_predict_time+ssd->parameter->time_characteristics.tPROG;
     }
     else if(command==NORMAL)
@@ -3092,15 +3092,19 @@ struct ssd_info *compute_serve_time(struct ssd_info *ssd,unsigned int channel,un
 
         delete_from_channel(ssd,channel,subs[0]);
 
-        ssd->channel_head[channel].current_state=CHANNEL_TRANSFER;										
+        ssd->channel_head[channel].current_state=CHANNEL_TRANSFER;
         ssd->channel_head[channel].current_time=ssd->current_time;										
         ssd->channel_head[channel].next_state=CHANNEL_IDLE;										
         ssd->channel_head[channel].next_state_predict_time=subs[0]->complete_time;
 
         ssd->channel_head[channel].chip_head[chip].current_state=CHIP_WRITE_BUSY;										
         ssd->channel_head[channel].chip_head[chip].current_time=ssd->current_time;									
-        ssd->channel_head[channel].chip_head[chip].next_state=CHIP_IDLE;										
-        ssd->channel_head[channel].chip_head[chip].next_state_predict_time=ssd->channel_head[channel].next_state_predict_time+ssd->parameter->time_characteristics.tPROG;
+        ssd->channel_head[channel].chip_head[chip].next_state=CHIP_IDLE;
+        if (ssd->slc_flag == 0) {
+            ssd->channel_head[channel].chip_head[chip].next_state_predict_time=ssd->channel_head[channel].next_state_predict_time + ssd->parameter->time_characteristics.tPROG;
+        } else {
+            ssd->channel_head[channel].chip_head[chip].next_state_predict_time=ssd->channel_head[channel].next_state_predict_time + ssd->parameter->time_characteristics.tSPROG;
+        }
     }
     else
     {
@@ -3279,7 +3283,7 @@ struct ssd_info *un_greed_interleave_copyback(struct ssd_info *ssd,unsigned int 
 
         ssd->channel_head[channel].chip_head[chip].current_state=CHIP_WRITE_BUSY;										
         ssd->channel_head[channel].chip_head[chip].current_time=ssd->current_time;									
-        ssd->channel_head[channel].chip_head[chip].next_state=CHIP_IDLE;										
+        ssd->channel_head[channel].chip_head[chip].next_state=CHIP_IDLE;
         ssd->channel_head[channel].chip_head[chip].next_state_predict_time=ssd->channel_head[channel].next_state_predict_time+ssd->parameter->time_characteristics.tPROG;
 
         delete_from_channel(ssd,channel,sub1);
@@ -3324,7 +3328,7 @@ struct ssd_info *un_greed_interleave_copyback(struct ssd_info *ssd,unsigned int 
 
         ssd->channel_head[channel].chip_head[chip].current_state=CHIP_WRITE_BUSY;										
         ssd->channel_head[channel].chip_head[chip].current_time=ssd->current_time;									
-        ssd->channel_head[channel].chip_head[chip].next_state=CHIP_IDLE;										
+        ssd->channel_head[channel].chip_head[chip].next_state=CHIP_IDLE;
         ssd->channel_head[channel].chip_head[chip].next_state_predict_time=ssd->channel_head[channel].next_state_predict_time+ssd->parameter->time_characteristics.tPROG;
 
         delete_from_channel(ssd,channel,sub1);
@@ -3549,13 +3553,30 @@ Status go_one_step(struct ssd_info * ssd, struct sub_request * sub1,struct sub_r
                     sub->current_time=ssd->current_time;
                     sub->current_state=SR_R_READ;
                     sub->next_state=SR_R_DATA_TRANSFER;
-                    sub->next_state_predict_time=ssd->current_time+ssd->parameter->time_characteristics.tR;
+
+                    if(ssd->slc_flag == 0) {
+                        sub->next_state_predict_time=ssd->current_time+ssd->parameter->time_characteristics.tR;
+                    } else {
+                        if (location->block < ssd->parameter->slc_block_plane) {
+                            sub->next_state_predict_time=ssd->current_time+ssd->parameter->time_characteristics.tSR;
+                        } else {
+                            sub->next_state_predict_time=ssd->current_time+ssd->parameter->time_characteristics.tR;
+                        }
+                    }
+
 
                     ssd->channel_head[location->channel].chip_head[location->chip].current_state=CHIP_READ_BUSY;
                     ssd->channel_head[location->channel].chip_head[location->chip].current_time=ssd->current_time;
                     ssd->channel_head[location->channel].chip_head[location->chip].next_state=CHIP_DATA_TRANSFER;
-                    ssd->channel_head[location->channel].chip_head[location->chip].next_state_predict_time=ssd->current_time+ssd->parameter->time_characteristics.tR;
-
+                    if(ssd->slc_flag == 0) {
+                        ssd->channel_head[location->channel].chip_head[location->chip].next_state_predict_time=ssd->current_time+ssd->parameter->time_characteristics.tR;
+                    } else {
+                        if (location->block < ssd->parameter->slc_block_plane) {
+                            ssd->channel_head[location->channel].chip_head[location->chip].next_state_predict_time=ssd->current_time+ssd->parameter->time_characteristics.tSR;
+                        } else {
+                            ssd->channel_head[location->channel].chip_head[location->chip].next_state_predict_time=ssd->current_time+ssd->parameter->time_characteristics.tR;
+                        }
+                    }
                     break;
                 }
             case SR_R_C_A_TRANSFER:
@@ -3568,7 +3589,7 @@ Status go_one_step(struct ssd_info * ssd, struct sub_request * sub1,struct sub_r
                     sub->current_time=ssd->current_time;									
                     sub->current_state=SR_R_C_A_TRANSFER;									
                     sub->next_state=SR_R_READ;									
-                    sub->next_state_predict_time=ssd->current_time+7*ssd->parameter->time_characteristics.tWC;									
+                    sub->next_state_predict_time=ssd->current_time+ 7 * ssd->parameter->time_characteristics.tWC;
                     sub->begin_time=ssd->current_time;
 
                     ssd->channel_head[location->channel].chip_head[location->chip].die_head[location->die].plane_head[location->plane].add_reg_ppn=sub->ppn;
@@ -3577,12 +3598,12 @@ Status go_one_step(struct ssd_info * ssd, struct sub_request * sub1,struct sub_r
                     ssd->channel_head[location->channel].current_state=CHANNEL_C_A_TRANSFER;									
                     ssd->channel_head[location->channel].current_time=ssd->current_time;										
                     ssd->channel_head[location->channel].next_state=CHANNEL_IDLE;								
-                    ssd->channel_head[location->channel].next_state_predict_time=ssd->current_time+7*ssd->parameter->time_characteristics.tWC;
+                    ssd->channel_head[location->channel].next_state_predict_time=ssd->current_time+7 * ssd->parameter->time_characteristics.tWC;
 
                     ssd->channel_head[location->channel].chip_head[location->chip].current_state=CHIP_C_A_TRANSFER;								
                     ssd->channel_head[location->channel].chip_head[location->chip].current_time=ssd->current_time;						
                     ssd->channel_head[location->channel].chip_head[location->chip].next_state=CHIP_READ_BUSY;							
-                    ssd->channel_head[location->channel].chip_head[location->chip].next_state_predict_time=ssd->current_time+7*ssd->parameter->time_characteristics.tWC;
+                    ssd->channel_head[location->channel].chip_head[location->chip].next_state_predict_time=ssd->current_time+7 * ssd->parameter->time_characteristics.tWC;
 
                     break;
 
@@ -3639,6 +3660,15 @@ Status go_one_step(struct ssd_info * ssd, struct sub_request * sub1,struct sub_r
                     ssd->channel_head[location->channel].chip_head[location->chip].current_time=ssd->current_time;									
                     ssd->channel_head[location->channel].chip_head[location->chip].next_state=CHIP_IDLE;										
                     ssd->channel_head[location->channel].chip_head[location->chip].next_state_predict_time=time+ssd->parameter->time_characteristics.tPROG;
+                    if(ssd->slc_flag == 0) {
+                        ssd->channel_head[location->channel].chip_head[location->chip].next_state_predict_time=time+ssd->parameter->time_characteristics.tPROG;
+                    } else {
+                        if (location->block < ssd->parameter->slc_block_plane) {
+                            ssd->channel_head[location->channel].chip_head[location->chip].next_state_predict_time=time+ssd->parameter->time_characteristics.tSPROG;
+                        } else {
+                            ssd->channel_head[location->channel].chip_head[location->chip].next_state_predict_time=time+ssd->parameter->time_characteristics.tPROG;
+                        }
+                    }
 
                     break;
                 }
