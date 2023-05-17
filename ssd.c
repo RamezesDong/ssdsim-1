@@ -27,10 +27,12 @@ Hao Luo         2011/01/01        2.0           Change               luohao13568
   核心处理函数，trace文件从读进来到处理完成都由这个函数来完成；5，statistic_output()函数将ssd结构中的信息输出到输出文件，输出的是
   统计数据和平均数据，输出文件较小，trace_output文件则很大很详细；6，free_all_node()函数释放整个main函数中申请的节点
  *********************************************************************************************************************************/
-int  main()
+int  main(int argc, char const *argv[])
 {
     unsigned  int i,j,k;
     struct ssd_info *ssd;
+    char outputfilename[200],statisticfilename[200];
+
 
 #ifdef DEBUG
     printf("enter main\n"); 
@@ -39,7 +41,29 @@ int  main()
     ssd=(struct ssd_info*)malloc(sizeof(struct ssd_info));
     alloc_assert(ssd,"ssd");
     memset(ssd,0, sizeof(struct ssd_info));
+    if (argc==2)
+	{
+		printf("filename:%s\n",argv[1]); 
+		strcpy(ssd->tracefilename,argv[1]);
 
+		strcpy(outputfilename,argv[1]);
+		strcat(outputfilename,"_output");
+		printf("outputfilename:%s\n",outputfilename); 
+		strcpy(ssd->outputfilename,outputfilename);
+
+		strcpy(statisticfilename,argv[1]);
+		strcat(statisticfilename,"_statistic");
+		strcpy(ssd->statisticfilename,statisticfilename);
+		printf("statisticfilename:%s\n",statisticfilename); 
+	}
+	else
+	{
+		printf("%s\n", "running as default");
+		strncpy(ssd->tracefilename,"test",5);
+		strncpy(ssd->outputfilename,"ex.out",7);
+		strncpy(ssd->statisticfilename,"statistic10.dat",16);
+
+	}
     ssd=initiation(ssd);
     make_aged(ssd);
     pre_process_page(ssd);
@@ -99,22 +123,25 @@ struct ssd_info *simulate(struct ssd_info *ssd)
     fprintf(ssd->outputfile,"      arrive           lsn     size ope     begin time    response time    process time\n");	
     fflush(ssd->outputfile);
 
+    int i =0;
     while(flag!=100)      
     {
-
+        i++;
         flag=get_requests(ssd);
 
-
+        // printf("\nrequest %d", i);
         if(flag == 1)
         {   
-            //printf("once\n");
+            // printf("once\n");
             if (ssd->parameter->dram_capacity!=0)
             {
+                // printf("bufffer\n");
                 buffer_management(ssd);  
                 distribute(ssd); 
             } 
             else
             {
+                // printf("without bufffer\n");
                 no_buffer_distribute(ssd);
             }		
         }
@@ -123,172 +150,221 @@ struct ssd_info *simulate(struct ssd_info *ssd)
         trace_output(ssd);
         if(flag == 0 && ssd->request_queue == NULL)
             flag = 100;
+        // printf("\nrequest %d", i);
+
     }
 
     fclose(ssd->tracefile);
     return ssd;
 }
 
+int read_ndata(char *buffer, int64_t *time_t, int *lsn, int *size, int *ope) //aligned trace
+{
+	double time_f;
+	int disk;
+	int lsn1;
+	int size1;
+        int rw;
+        sscanf(buffer, "%lf  %d %d %d %d", &time_f, &disk, &lsn1, &size1, &rw);
+	if(lsn1 == 0 && size1 == 0 && time_f == 0 )
+	{
+		
+		return 0;
+	}
+	*ope = rw;
+	*lsn = lsn1;
+	*size = size1;
+	*time_t = (int64_t)(time_f * 1000000);
+	return 1;
+	
+}
+int read_data(struct ssd_info *ssd,char *buffer, int64_t *time_t, int *lsn, int *size, int *ope)
+{
+	//read_wdata(buffer, time_t, lsn, size, ope);
+	//read_fdata(buffer, time_t, lsn, size, ope);
+	//read_ddata(buffer, time_t, lsn, size, ope);
+	read_ndata(buffer, time_t, lsn, size, ope);
+	
+}
+
 
 
 /********    get_request    ******************************************************
- *	1.get requests that arrived already
- *	2.add those request node to ssd->reuqest_queue
- *	return	0: reach the end of the trace
- *			-1: no request has been added
- *			1: add one request to list
- *SSD模拟器有三种驱动方式:时钟驱动(精确，太慢) 事件驱动(本程序采用) trace驱动()，
- *两种方式推进事件：channel/chip状态改变、trace文件请求达到。
- *channel/chip状态改变和trace文件请求到达是散布在时间轴上的点，每次从当前状态到达
- *下一个状态都要到达最近的一个状态，每到达一个点执行一次process
- ********************************************************************************/
+*	1.get requests that arrived already
+*	2.add those request node to ssd->reuqest_queue
+*	return	0: reach the end of the trace
+*			-1: no request has been added
+*			1: add one request to list
+*SSD模拟器有三种驱动方式:时钟驱动(精确，太慢) 事件驱动(本程序采用) trace驱动()，
+*两种方式推进事件：channel/chip状态改变、trace文件请求达到。
+*channel/chip状态改变和trace文件请求到达是散布在时间轴上的点，每次从当前状态到达
+*下一个状态都要到达最近的一个状态，每到达一个点执行一次process
+********************************************************************************/
 int get_requests(struct ssd_info *ssd)  
 {  
-    char buffer[200];
-    unsigned int lsn=0;
-    int device,  size, ope,large_lsn, i = 0,j=0;
-    struct request *request1;
-    int flag = 1;
-    long filepoint; 
-    int64_t time_t = 0;
-    int64_t nearest_event_time;    
+	char buffer[200];
+	unsigned int lsn=0;
+	int device=-1,  size=0, ope=0,large_lsn=0, i = 0,j=0;
+	struct request *request1;
+	int flag = 1;
+	long filepoint; 
+	int64_t time_t = 0;
+	int64_t nearest_event_time;    
+	int result=0;
 
-#ifdef DEBUG
-    printf("enter get_requests,  current time:%lld\n",ssd->current_time);
-#endif
-
-    if(feof(ssd->tracefile))
-        return 0; 
-
-    filepoint = ftell(ssd->tracefile);	
-    fgets(buffer, 200, ssd->tracefile); 
-    sscanf(buffer,"%lld %d %d %d %d",&time_t,&device,&lsn,&size,&ope);
-
-    if ((device<0)&&(lsn<0)&&(size<0)&&(ope<0))
-    {
-        return 100;
-    }
-    if (lsn<ssd->min_lsn) 
-        ssd->min_lsn=lsn;
-    if (lsn>ssd->max_lsn)
-        ssd->max_lsn=lsn;
-    /******************************************************************************************************
-     *上层文件系统发送给SSD的任何读写命令包括两个部分（LSN，size） LSN是逻辑扇区号，对于文件系统而言，它所看到的存
-     *储空间是一个线性的连续空间。例如，读请求（260，6）表示的是需要读取从扇区号为260的逻辑扇区开始，总共6个扇区。
-     *large_lsn: channel下面有多少个subpage，即多少个sector。overprovide系数：SSD中并不是所有的空间都可以给用户使用，
-     *比如32G的SSD可能有10%的空间保留下来留作他用，所以乘以1-provide
-     ***********************************************************************************************************/
-    large_lsn=(int)((1.0 * ssd->parameter->subpage_page *
-            ssd->parameter->page_block *
-            ssd->parameter->block_plane *
-            ssd->parameter->plane_die *
-            ssd->parameter->die_chip *
-            ssd->parameter->chip_num)*(1-ssd->parameter->overprovide));
-    lsn = lsn%large_lsn; // lsn % (8 * 64 * 768 * 2 * 2 * 2) 3145728
-
-    nearest_event_time=find_nearest_event(ssd);
-    if (nearest_event_time==MAX_INT64)
-    {
-        ssd->current_time=time_t;           
-
-        //if (ssd->request_queue_length>ssd->parameter->queue_length)    //如果请求队列的长度超过了配置文件中所设置的长度                     
-        //{
-        //printf("error in get request , the queue length is too long\n");
-        //}
-    }
-    else
-    {   
-        if(nearest_event_time<time_t)
-        {
-            /*******************************************************************************
-             *回滚，即如果没有把time_t赋给ssd->current_time，则trace文件已读的一条记录回滚
-             *filepoint记录了执行fgets之前的文件指针位置，回滚到文件头+filepoint处
-             *int fseek(FILE *stream, long offset, int fromwhere);函数设置文件指针stream的位置。
-             *如果执行成功，stream将指向以fromwhere（偏移起始位置：文件头0，当前位置1，文件尾2）为基准，
-             *偏移offset（指针偏移量）个字节的位置。如果执行失败(比如offset超过文件自身大小)，则不改变stream指向的位置。
-             *文本文件只能采用文件头0的定位方式，本程序中打开文件方式是"r":以只读方式打开文本文件	
-             **********************************************************************************/
-            fseek(ssd->tracefile,filepoint,0); 
-            if(ssd->current_time<=nearest_event_time)
-                ssd->current_time=nearest_event_time;
-            return -1;
-        }
-        else
-        {
-            if (ssd->request_queue_length>=ssd->parameter->queue_length)
-            {
-                fseek(ssd->tracefile,filepoint,0);
-                ssd->current_time=nearest_event_time;
-                return -1;
-            } 
-            else
-            {
-                ssd->current_time=time_t;
-            }
-        }
-    }
-
-    if(time_t < 0)
-    {
-        printf("error!\n");
-        while(1){}
-    }
-
-    if(feof(ssd->tracefile))
-    {
-        request1=NULL;
-        return 0;
-    }
-
-    request1 = (struct request*)malloc(sizeof(struct request));
-    alloc_assert(request1,"request");
-    memset(request1,0, sizeof(struct request));
-
-    request1->time = time_t;
-    request1->lsn = lsn;
-    request1->size = size;
-    request1->operation = ope;	
-    request1->begin_time = time_t;
-    request1->response_time = 0;	
-    request1->energy_consumption = 0;	
-    request1->next_node = NULL;
-    request1->distri_flag = 0;              // indicate whether this request has been distributed already
-    request1->subs = NULL;
-    request1->need_distr_flag = NULL;
-    request1->complete_lsn_count=0;         //record the count of lsn served by buffer
-    filepoint = ftell(ssd->tracefile);		// set the file point
-
-    if(ssd->request_queue == NULL)          //The queue is empty
-    {
-        ssd->request_queue = request1;
-        ssd->request_tail = request1;
-        ssd->request_queue_length++;
-    }
-    else
-    {			
-        (ssd->request_tail)->next_node = request1;	
-        ssd->request_tail = request1;			
-        ssd->request_queue_length++;
-    }
-
-    if (request1->operation==1)             //计算平均请求大小 1为读 0为写
-    {
-        ssd->ave_read_size=(ssd->ave_read_size*ssd->read_request_count+request1->size)/(ssd->read_request_count+1);
-    } 
-    else
-    {
-        ssd->ave_write_size=(ssd->ave_write_size*ssd->write_request_count+request1->size)/(ssd->write_request_count+1);
-    }
+	#ifdef DEBUG
+	printf("enter get_requests,  current time:%lld\n",ssd->current_time);
+	#endif
 
 
-    filepoint = ftell(ssd->tracefile);	
-    fgets(buffer, 200, ssd->tracefile);    //寻找下一条请求的到达时间
-    sscanf(buffer,"%lld %d %d %d %d",&time_t,&device,&lsn,&size,&ope);
-    ssd->next_request_time=time_t;
-    fseek(ssd->tracefile,filepoint,0);
+	filepoint = ftell(ssd->tracefile);
+	fgets(buffer, 200, ssd->tracefile);
 
-    return 1;
+	result = read_data(ssd,buffer, &time_t, &lsn, &size, &ope);
+
+
+	//printf("feop3:%ld  %ld  %ld  %ld  %d  %d \n", feof(ssd->tracefile),time_t, lsn, size, ope,ssd->request_queue_length );
+    
+	if ((device<0)&&(lsn<0)&&(size<0)&&(ope<0))
+	{
+		return 100;
+	}
+
+
+
+	nearest_event_time=find_nearest_event(ssd);
+
+	if(feof(ssd->tracefile))
+	 {
+	 	ssd->current_time=nearest_event_time;
+	 	request1=NULL;
+	 	return 0;
+	 }
+
+	if(time_t < 0)
+	{
+		printf("error!\n");
+		while(1){}
+	}
+
+	/******************************************************************************************************
+	*上层文件系统发送给SSD的任何读写命令包括两个部分（LSN，size） LSN是逻辑扇区号，对于文件系统而言，它所看到的存
+	*储空间是一个线性的连续空间。例如，读请求（260，6）表示的是需要读取从扇区号为260的逻辑扇区开始，总共6个扇区。
+	*large_lsn: channel下面有多少个subpage，即多少个sector。overprovide系数：SSD中并不是所有的空间都可以给用户使用，
+	*比如32G的SSD可能有10%的空间保留下来留作他用，所以乘以1-provide
+	***********************************************************************************************************/
+
+	
+
+
+	if (nearest_event_time==MAX_INT64)
+	{
+		ssd->current_time=time_t;           
+		                                                  
+		//if (ssd->request_queue_length>ssd->parameter->queue_length)    //如果请求队列的长度超过了配置文件中所设置的长度                     
+		//{
+			//printf("error in get request , the queue length is too long\n");
+		//}
+	}
+	else
+	{   
+		if(nearest_event_time<time_t)
+		{
+			/*******************************************************************************
+			*回滚，即如果没有把time_t赋给ssd->current_time，则trace文件已读的一条记录回滚
+			*filepoint记录了执行fgets之前的文件指针位置，回滚到文件头+filepoint处
+			*int fseek(FILE *stream, long offset, int fromwhere);函数设置文件指针stream的位置。
+			*如果执行成功，stream将指向以fromwhere（偏移起始位置：文件头0，当前位置1，文件尾2）为基准，
+			*偏移offset（指针偏移量）个字节的位置。如果执行失败(比如offset超过文件自身大小)，则不改变stream指向的位置。
+			*文本文件只能采用文件头0的定位方式，本程序中打开文件方式是"r":以只读方式打开文本文件	
+			**********************************************************************************/
+			fseek(ssd->tracefile,filepoint,0); 
+			if(ssd->current_time<=nearest_event_time)
+				ssd->current_time=nearest_event_time;
+			return -1;
+
+		}
+		else
+		{
+			if (ssd->request_queue_length>=ssd->parameter->queue_length)
+			{
+				fseek(ssd->tracefile,filepoint,0);
+				ssd->current_time=nearest_event_time;
+				return -1;
+			} 
+			else
+			{
+				ssd->current_time=time_t;
+			}
+		}
+	}
+
+
+
+
+
+	if (lsn<ssd->min_lsn) 
+		ssd->min_lsn=lsn;
+	if (lsn>ssd->max_lsn)
+		ssd->max_lsn=lsn;
+	large_lsn=(int)((ssd->parameter->subpage_page*ssd->parameter->page_block*ssd->parameter->block_plane*ssd->parameter->plane_die*ssd->parameter->die_chip*ssd->parameter->chip_num)*(1-ssd->parameter->overprovide));
+	lsn = lsn%large_lsn;
+
+
+
+	request1 = (struct request*)malloc(sizeof(struct request));
+	alloc_assert(request1,"request");
+	memset(request1,0, sizeof(struct request));
+
+	request1->time = time_t;
+	request1->lsn = lsn;
+	request1->size = size;
+	request1->operation = ope;	
+	request1->begin_time = time_t;
+	request1->response_time = 0;	
+	request1->energy_consumption = 0;	
+	request1->next_node = NULL;
+	request1->distri_flag = 0;              // indicate whether this request has been distributed already
+	request1->subs = NULL;
+	request1->need_distr_flag = NULL;
+	request1->complete_lsn_count=0;         //record the count of lsn served by buffer
+	filepoint = ftell(ssd->tracefile);		// set the file point
+
+	if(ssd->request_queue == NULL)          //The queue is empty
+	{
+		ssd->request_queue = request1;
+		ssd->request_tail = request1;
+		ssd->request_queue_length++;
+	}
+	else
+	{			
+		(ssd->request_tail)->next_node = request1;	
+		ssd->request_tail = request1;			
+		ssd->request_queue_length++;
+	}
+
+	if (request1->operation==1)             //计算平均请求大小 1为读 0为写
+	{
+		ssd->ave_read_size=(ssd->ave_read_size*ssd->read_request_count+request1->size)/(ssd->read_request_count+1);
+	} 
+	else
+	{
+		ssd->ave_write_size=(ssd->ave_write_size*ssd->write_request_count+request1->size)/(ssd->write_request_count+1);
+	}
+
+
+	#ifdef DEBUG
+    printf("%ld new request continue to be added to SSD\n",ssd->count++);
+    #endif
+	// filepoint = ftell(ssd->tracefile);	
+	// fgets(buffer, 200, ssd->tracefile);    //寻找下一条请求的到达时间
+	// sscanf(buffer,"%lld %d %d %d %d",&time_t,&device,&lsn,&size,&ope);
+	// ssd->next_request_time=time_t;
+	// fseek(ssd->tracefile,filepoint,0);
+
+	return 1;
 }
+
 
 /**********************************************************************************************************************************************
  *首先buffer是个写buffer，就是为写请求服务的，因为读flash的时间tR为20us，写flash的时间tprog为200us，所以为写服务更能节省时间
@@ -548,6 +624,7 @@ void trace_output(struct ssd_info* ssd){
 #ifdef DEBUG
     printf("enter trace_output,  current time:%lld\n",ssd->current_time);
 #endif
+    printf("enter trace_output,  current time:%lld\n",ssd->current_time);
 
     pre_node=NULL;
     req = ssd->request_queue;
@@ -556,7 +633,7 @@ void trace_output(struct ssd_info* ssd){
 
     if(req == NULL)
         return;
-
+    int i = 0;
     while(req != NULL)	
     {
         sub = req->subs;
@@ -631,12 +708,16 @@ void trace_output(struct ssd_info* ssd){
                     ssd->request_queue_length--;
                 }
             }
+            printf("\nreq count is %d, if switch", i);
         }
         else
         {
+            printf("\nreq count is %d, else switch", i);
+
             flag=1;
             while(sub != NULL)
             {
+                //  printf("\nstart time %d, else switch", start_time);
                 if(start_time == 0)
                     start_time = sub->begin_time;
                 if(start_time > sub->begin_time)
@@ -677,9 +758,12 @@ void trace_output(struct ssd_info* ssd){
                     ssd->write_request_count++;
                     ssd->write_avg=ssd->write_avg+(end_time-req->time);
                 }
+                printf("\nstart time %d, else switch !!!", start_time);
+
 
                 while(req->subs!=NULL)
                 {
+                    
                     tmp = req->subs;
                     req->subs = tmp->next_subs;
                     if (tmp->update!=NULL)
@@ -1110,9 +1194,11 @@ struct ssd_info *no_buffer_distribute(struct ssd_info *ssd)
     lpn=req->lsn/ssd->parameter->subpage_page;
     last_lpn=(req->lsn+req->size-1)/ssd->parameter->subpage_page;
     first_lpn=req->lsn/ssd->parameter->subpage_page;
+    printf("\noperator %d", req->operation);
 
     if(req->operation==READ)        
     {		
+        printf("\nRead %d", lpn);
         while(lpn<=last_lpn) 		
         {
             sub_state=(ssd->dram->map->map_entry[lpn].state&0x7fffffff);
@@ -1123,6 +1209,7 @@ struct ssd_info *no_buffer_distribute(struct ssd_info *ssd)
     }
     else if(req->operation==WRITE)
     {
+        printf("\nWrite %d", lpn);
         while(lpn<=last_lpn)     	
         {	
             mask=~(0xffffffff<<(ssd->parameter->subpage_page));

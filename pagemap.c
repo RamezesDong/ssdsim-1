@@ -2049,7 +2049,4 @@ int gc_for_slc(struct ssd_info *ssd,unsigned int channel,unsigned int chip,unsig
 
         }
     }
-
-
-    return 1;
 }

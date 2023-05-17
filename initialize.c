@@ -95,25 +95,33 @@ struct ssd_info *initiation(struct ssd_info *ssd)
 
     strncpy(ssd->parameterfilename,"page.parameters",16);
     //strncpy(ssd->tracefilename,"example.ascii",25);
-    printf("\ninput trace file name:");
-    scanf("%s",ssd->tracefilename);
-    strncpy(ssd->outputfilename,"ex.out",7);
-    strncpy(ssd->statisticfilename,"statistic10.dat",16);
+    // printf("\ninput trace file name:");
+    // scanf("%s",ssd->tracefilename);
+    // strncpy(ssd->outputfilename,"ex.out",7);
+    // strncpy(ssd->statisticfilename,"statistic10.dat",16);
     strncpy(ssd->statisticfilename2,"statistic2.dat",15);
 
     //导入ssd的配置文件
+    printf("\nssd parame:");
     parameters=load_parameters(ssd->parameterfilename);
     ssd->parameter=parameters;
     ssd->min_lsn=0x7fffffff;
     ssd->page=ssd->parameter->chip_num*ssd->parameter->die_chip*ssd->parameter->plane_die*ssd->parameter->block_plane*ssd->parameter->page_block;
 
     //初始化 dram
+    printf("\nssd dram:");
     ssd->dram = (struct dram_info *)malloc(sizeof(struct dram_info));
+        printf("\nssd dram:1");
+
     alloc_assert(ssd->dram,"ssd->dram");
     memset(ssd->dram,0,sizeof(struct dram_info));
+    printf("\nssd dram:2");
     initialize_dram(ssd);
+    printf("\nssd dram:3");
+
 
     //初始化通道
+    printf("\nssd channel:");
     ssd->channel_head=(struct channel_info*)malloc(ssd->parameter->channel_number * sizeof(struct channel_info));
     alloc_assert(ssd->channel_head,"ssd->channel_head");
     memset(ssd->channel_head,0,ssd->parameter->channel_number * sizeof(struct channel_info));
@@ -216,7 +224,7 @@ struct blk_info * initialize_block(struct blk_info * p_block,struct parameter_va
 {
     unsigned int i;
     struct page_info * p_page;
-
+    printf("\ninitialize block");
     if(blk_type == 0) {
       p_block->blk_type = 0;
       p_block->free_page_num = parameter->page_block;	// all pages are free
@@ -259,6 +267,7 @@ struct plane_info * initialize_plane(struct plane_info * p_plane,struct paramete
         p_block = &(p_plane->blk_head[i]);
         initialize_block( p_block ,parameter, 0);
       }
+      printf("\n initialize tlc block: %d", i);
     } else {
       p_plane->plane_type = 1;
       p_plane->tlc_blk_num = parameter->block_plane - parameter->slc_block_plane; // block_plane - slc_block_plane
@@ -270,12 +279,13 @@ struct plane_info * initialize_plane(struct plane_info * p_plane,struct paramete
 
       p_plane->blk_head = (struct blk_info *)malloc(p_plane->tlc_blk_num * sizeof(struct blk_info));
       alloc_assert(p_plane->blk_head,"p_plane->blk_head");
-      memset(p_plane->blk_head,0,parameter->block_plane * sizeof(struct blk_info));
+      memset(p_plane->blk_head,0,(parameter->block_plane - parameter->slc_block_plane) * sizeof(struct blk_info));
 
       for(i = 0; i < p_plane->tlc_blk_num; i++)
       {
         p_block = &(p_plane->blk_head[i]);
         initialize_block( p_block ,parameter, 0);
+        printf("\n initialize tlc block: %d", i);
       }
 
       //extra slc
